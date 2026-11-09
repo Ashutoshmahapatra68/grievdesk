@@ -4,29 +4,52 @@
 
 @layer base {
   :root {
-    --background: 75 14% 97%;
-    --foreground: 165 23% 14%;
-    --card: 0 0% 100%;
-    --card-foreground: 165 23% 14%;
-    --primary: 165 76% 24%;
+    --background: 210 20% 98%;      /* #F8FAFC soft grey */
+    --foreground: 222 47% 11%;      /* #0F172A deep navy text */
+    --card: 0 0% 100%;              /* #FFFFFF crisp white cards */
+    --card-foreground: 222 47% 11%;
+    --primary: 222 47% 16%;         /* #0F172A corporate navy */
     --primary-foreground: 0 0% 100%;
-    --secondary: 160 30% 94%;
-    --secondary-foreground: 165 76% 18%;
-    --muted: 75 12% 93%;
-    --muted-foreground: 160 10% 32%;
-    --accent: 160 40% 92%;
-    --accent-foreground: 165 76% 18%;
-    --destructive: 0 62% 40%;
+    --secondary: 214 32% 93%;       /* #F1F5F9 */
+    --secondary-foreground: 222 47% 14%;
+    --muted: 210 20% 96%;           /* #F1F5F9 */
+    --muted-foreground: 215 16% 47%;/* #64748B */
+    --accent: 217 91% 60%;          /* #2563EB vibrant modern blue */
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84% 60%;       /* #EF4444 */
     --destructive-foreground: 0 0% 100%;
-    --border: 140 10% 87%;
-    --input: 140 10% 80%;
-    --ring: 165 76% 24%;
-    --radius: 0.625rem;
+    --border: 214 32% 91%;          /* #E2E8F0 */
+    --input: 214 32% 90%;
+    --ring: 217 91% 60%;
+    --radius: 0.75rem;
   }
-  * { @apply border-border; }
+
+  * {
+    @apply border-border;
+  }
+
   body {
-    @apply bg-background text-foreground antialiased;
-    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', 'Noto Sans Devanagari', 'Noto Sans Oriya', sans-serif;
+    @apply bg-background text-foreground antialiased selection:bg-blue-100 selection:text-blue-900;
+    font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif;
   }
-  :focus-visible { @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background; }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }
