@@ -462,12 +462,13 @@ export function ManagementComplaints() {
                             {evt.action?.replace('_', ' ')}
                           </span>
                           <span className="text-slate-400">
-                            {evt.created_at ? new Date(evt.created_at).toLocaleString() : ''}
+                            {(evt.at || evt.created_at) ? new Date(evt.at || evt.created_at).toLocaleString() : ''}
                           </span>
                         </div>
-                        {evt.detail && <p className="text-slate-600 mt-0.5">{evt.detail}</p>}
-                        {evt.actor_name && (
-                          <p className="text-slate-400 text-[11px] mt-0.5">By {evt.actor_name}</p>
+                        {evt.detail && <p className="text-slate-600 mt-0.5 capitalize">{evt.detail.replace('_', ' ')}</p>}
+                        {evt.note && <p className="text-slate-600 mt-0.5 italic">"{evt.note}"</p>}
+                        {(evt.by || evt.actor_name) && (
+                          <p className="text-slate-400 text-[11px] mt-0.5">By {evt.by || evt.actor_name}</p>
                         )}
                       </div>
                     </div>

@@ -39,6 +39,7 @@ export function ManagementApprovals() {
     try {
       await userApi.approveUser(user.id)
       toast.success(`${user.name} (Flat ${user.flat_no}) approved. They can now log in.`)
+      window.dispatchEvent(new Event('grievdesk:refresh-counts'))
       fetchPending()
     } catch (err) {
       toast.error(err.message || 'Failed to approve resident.')

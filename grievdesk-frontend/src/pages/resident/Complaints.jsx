@@ -304,14 +304,17 @@ export function ResidentComplaints() {
                         <div className="flex items-center gap-2">
                           <span className="font-bold capitalize text-slate-800">{event.action?.replace('_', ' ')}</span>
                           <span className="text-slate-400">
-                            {event.created_at ? new Date(event.created_at).toLocaleString() : ''}
+                            {(event.at || event.created_at) ? new Date(event.at || event.created_at).toLocaleString() : ''}
                           </span>
                         </div>
                         {event.detail && (
-                          <p className="text-slate-600 mt-0.5">{event.detail}</p>
+                          <p className="text-slate-600 mt-0.5 capitalize">{event.detail.replace('_', ' ')}</p>
                         )}
-                        {event.actor_name && (
-                          <p className="text-slate-400 text-[11px] mt-0.5">By {event.actor_name}</p>
+                        {event.note && (
+                          <p className="text-slate-600 mt-0.5 italic">"{event.note}"</p>
+                        )}
+                        {(event.by || event.actor_name) && (
+                          <p className="text-slate-400 text-[11px] mt-0.5">By {event.by || event.actor_name}</p>
                         )}
                       </div>
                     </div>

@@ -137,7 +137,7 @@ export function ResidentOverview() {
                 <h4 className="font-bold text-slate-900 text-sm">{ann.title}</h4>
                 <p className="text-xs text-slate-600 mt-1 line-clamp-2">{ann.message}</p>
                 <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400">
-                  <span>By {ann.posted_by_name || 'Management'}</span>
+                  <span>By {ann.posted_by || ann.posted_by_name || 'Management'}</span>
                   <span>{ann.created_at ? new Date(ann.created_at).toLocaleDateString() : ''}</span>
                 </div>
               </div>

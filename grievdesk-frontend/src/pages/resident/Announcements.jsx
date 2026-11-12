@@ -86,7 +86,7 @@ export function ResidentAnnouncements() {
                       {ann.message}
                     </p>
                     <div className="pt-2 border-t border-amber-200/50 flex items-center justify-between text-xs text-amber-900/70">
-                      <span>Posted by {ann.posted_by_name || 'Management'}</span>
+                      <span>Posted by {ann.posted_by || ann.posted_by_name || 'Management'}</span>
                       <span className="flex items-center gap-1">
                         <Clock className="w-3 h-3" />
                         {ann.created_at ? new Date(ann.created_at).toLocaleDateString() : ''}
@@ -126,7 +126,7 @@ export function ResidentAnnouncements() {
                       {ann.message}
                     </p>
                     <div className="pt-2 flex items-center justify-between text-xs text-slate-400">
-                      <span>Posted by: {ann.posted_by_name || 'Management Office'}</span>
+                      <span>Posted by: {ann.posted_by || ann.posted_by_name || 'Management Office'}</span>
                     </div>
                   </div>
                 ))}

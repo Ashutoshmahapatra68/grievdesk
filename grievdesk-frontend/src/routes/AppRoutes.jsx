@@ -120,6 +120,8 @@ export function AppRoutes() {
         <Route path="/management/amenities" element={<ManagementAmenities />} />
         <Route path="/management/residents" element={<ManagementResidents />} />
         <Route path="/management/rules" element={<ManagementRules />} />
+        <Route path="/management/notifications" element={<ResidentNotifications />} />
+        <Route path="/management/search" element={<ResidentSearch />} />
 
         {/* Secretary-Exclusive Management Routes */}
         <Route

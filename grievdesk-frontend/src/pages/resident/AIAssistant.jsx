@@ -4,6 +4,8 @@ import {
   Sparkles,
   Send,
   Mic,
+  MicOff,
+  AudioLines,
   AlertTriangle,
   Wrench,
   BookOpen,
@@ -11,56 +13,108 @@ import {
   History,
   Plus,
   Bot,
-  User,
-  Shield,
   Layers,
   ArrowRight,
   Loader2,
-  Volume2,
   Globe,
+  Pin,
+  Bell,
+  Wand2,
 } from 'lucide-react'
 import { chatApi } from '@/api/chatApi'
 import { useAuth } from '@/context/AuthContext'
+import { useToast } from '@/context/ToastContext'
 import { Badge } from '@/components/common/Badge'
 import { VoiceRecorder } from '@/components/common/VoiceRecorder'
 
 const CHAT_MODES = [
+  { id: 'auto', label: 'Smart Auto', icon: Wand2, color: 'text-blue-700 bg-blue-50 border-blue-200' },
   { id: 'complaint', label: 'Raise Complaint', icon: AlertTriangle, color: 'text-rose-600 bg-rose-50 border-rose-200' },
   { id: 'service', label: 'Handyman Service', icon: Wrench, color: 'text-indigo-600 bg-indigo-50 border-indigo-200' },
   { id: 'rules', label: 'Ask Rules & Bylaws', icon: BookOpen, color: 'text-purple-600 bg-purple-50 border-purple-200' },
 ]
 
+const VALID_URL_MODES = new Set(['auto', 'complaint', 'service', 'rules', 'committee_action'])
+
+function inferIntentFromText(text) {
+  const lower = text.toLowerCase().trim()
+
+  const serviceHints = [
+    'need a plumber', 'call plumber', 'need an electrician', 'call electrician',
+    'ac mechanic', 'ac service', 'ac repair', 'laundry', 'ironing', 'dry clean',
+    'car wash', 'bike wash', 'vehicle service', 'puncture', 'book plumber',
+    'book electrician', 'send an electrician', 'send a plumber',
+  ]
+  if (serviceHints.some((h) => lower.includes(h))) {
+    return 'service'
+  }
+
+  const ruleHints = [
+    'rule', 'rules', 'bylaw', 'bylaws', 'policy', 'allowed', 'permitted',
+    'quiet hours', 'timings', 'timing', 'can i ', 'is it allowed', 'are pets',
+    'what are the ', 'what is the ', 'when does ', 'how many ',
+  ]
+  if (lower.endsWith('?') || ruleHints.some((h) => lower.includes(h))) {
+    return 'rules'
+  }
+
+  return 'complaint'
+}
+
 export function AIAssistant() {
   const [searchParams] = useSearchParams()
-  const initialType = searchParams.get('type') || 'complaint'
+  const rawType = searchParams.get('type')
+  const initialType = VALID_URL_MODES.has(rawType) ? rawType : 'auto'
   const { user, isStaff } = useAuth()
+  const toast = useToast()
 
   const [selectedType, setSelectedType] = useState(initialType)
   const [anonymous, setAnonymous] = useState(false)
   const [committeeAction, setCommitteeAction] = useState('announcement')
   const [pinAnnouncement, setPinAnnouncement] = useState(false)
+  const [reminderBlock, setReminderBlock] = useState('')
+  const [reminderFlat, setReminderFlat] = useState('')
 
   const [sessionId, setSessionId] = useState(() => 'sess_' + Math.random().toString(36).substring(2, 10))
   const [inputText, setInputText] = useState('')
   const [messages, setMessages] = useState([])
   const [loading, setLoading] = useState(false)
   const [isRecording, setIsRecording] = useState(false)
+  const [isDictating, setIsDictating] = useState(false)
 
   // Recent chat threads
   const [threads, setThreads] = useState([])
   const [showHistory, setShowHistory] = useState(false)
 
   const messagesEndRef = useRef(null)
+  const recognitionRef = useRef(null)
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }
+  const speechSupported =
+    typeof window !== 'undefined' &&
+    Boolean(window.SpeechRecognition || window.webkitSpeechRecognition)
 
   useEffect(() => {
-    scrollToBottom()
+    if (VALID_URL_MODES.has(rawType)) {
+      setSelectedType(rawType)
+    }
+  }, [rawType])
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, loading])
 
-  // Load recent threads
+  useEffect(() => {
+    return () => {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop()
+        } catch {
+          // Ignore cleanup stop errors
+        }
+      }
+    }
+  }, [])
+
   const loadRecents = () => {
     chatApi.getRecents()
       .then((res) => setThreads(res.threads || []))
@@ -91,41 +145,116 @@ export function AIAssistant() {
       }))
       setMessages(mapped)
     } catch {
-      // Fallback
+      toast.error('Failed to load conversation history.')
     } finally {
       setLoading(false)
     }
   }
 
-  const handleSendMessage = async (textToSend = inputText, audioBlob = null) => {
+  const toggleDictation = () => {
+    if (!speechSupported) {
+      toast.error('Live voice dictation is not supported in this browser. Use Voice Note recording instead.')
+      return
+    }
+
+    if (isDictating && recognitionRef.current) {
+      recognitionRef.current.stop()
+      setIsDictating(false)
+      return
+    }
+
+    const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition
+    const recognition = new SpeechRec()
+    const langMap = { hi: 'hi-IN', or: 'or-IN', en: 'en-IN' }
+    recognition.lang = langMap[user?.preferred_language] || 'en-IN'
+    recognition.interimResults = true
+    recognition.continuous = false
+
+    const baseText = inputText ? `${inputText.trim()} ` : ''
+
+    recognition.onresult = (event) => {
+      let transcript = ''
+      for (let i = 0; i < event.results.length; i++) {
+        transcript += event.results[i][0].transcript
+      }
+      setInputText(baseText + transcript)
+    }
+
+    recognition.onerror = () => {
+      setIsDictating(false)
+      toast.error('Could not capture voice dictation. Check microphone permissions.')
+    }
+
+    recognition.onend = () => {
+      setIsDictating(false)
+    }
+
+    recognitionRef.current = recognition
+    try {
+      recognition.start()
+      setIsDictating(true)
+    } catch {
+      setIsDictating(false)
+    }
+  }
+
+  const handleSendMessage = async (textToSend = inputText, audioBlob = null, forcedType = null) => {
     if (!audioBlob && !textToSend.trim()) return
+
+    if (isDictating && recognitionRef.current) {
+      try {
+        recognitionRef.current.stop()
+      } catch {
+        // Ignore
+      }
+      setIsDictating(false)
+    }
+
+    const rawTrimmed = textToSend.trim()
+    const effectiveType =
+      forcedType ||
+      (selectedType === 'auto'
+        ? audioBlob
+          ? 'complaint'
+          : inferIntentFromText(rawTrimmed)
+        : selectedType)
+
+    if (effectiveType === 'committee_action' && committeeAction === 'dues_reminder') {
+      if (!reminderBlock.trim() || !reminderFlat.trim()) {
+        toast.error('Please enter both Block and Flat number for the dues reminder.')
+        return
+      }
+    }
 
     const userMessage = {
       role: 'user',
-      text: audioBlob ? '🎤 [Voice Note Recording]' : textToSend.trim(),
-      type: selectedType,
+      text: audioBlob ? '🎤 [Voice Note Recording]' : rawTrimmed,
+      type: effectiveType,
       isAudio: !!audioBlob,
       timestamp: new Date().toISOString(),
     }
 
     setMessages((prev) => [...prev, userMessage])
-    if (!audioBlob) setInputText('')
+    if (!audioBlob && !forcedType) setInputText('')
     setIsRecording(false)
     setLoading(true)
 
     try {
       const payload = {
-        selected_type: selectedType,
-        text: audioBlob ? undefined : textToSend.trim(),
+        selected_type: effectiveType,
+        text: audioBlob ? undefined : rawTrimmed,
         audio: audioBlob || undefined,
         session_id: sessionId,
-        anonymous: selectedType === 'complaint' ? anonymous : undefined,
+        anonymous: effectiveType === 'complaint' ? anonymous : undefined,
       }
 
-      if (selectedType === 'committee_action') {
+      if (effectiveType === 'committee_action') {
         payload.action = committeeAction
         if (committeeAction === 'announcement') {
           payload.pin = pinAnnouncement
+        } else if (committeeAction === 'dues_reminder') {
+          payload.block_no = reminderBlock.trim()
+          payload.flat_no = reminderFlat.trim()
         }
       }
 
@@ -138,10 +267,13 @@ export function AIAssistant() {
         complaint: res.complaint,
         serviceRequest: res.service_request,
         announcement: res.announcement,
+        reminders: res.reminders,
         duplicateOf: res.duplicate_of,
         understood: res.understood,
         inputMode: res.input_mode,
         transcript: res.transcript,
+        sentType: effectiveType,
+        originalPrompt: rawTrimmed,
         timestamp: new Date().toISOString(),
       }
 
@@ -174,11 +306,11 @@ export function AIAssistant() {
             <div className="flex items-center gap-2">
               <h2 className="text-sm font-bold text-slate-900">GrievDesk AI Assistant</h2>
               <span className="text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full">
-                Powered by Gemini
+                Smart AI Engine
               </span>
             </div>
             <p className="text-[11px] text-slate-500">
-              Type or speak in English, Hindi, or Odia to log tickets automatically.
+              Type, dictate live, or record a voice note in English, Hindi, or Odia.
             </p>
           </div>
         </div>
@@ -288,7 +420,7 @@ export function AIAssistant() {
                 <div>
                   <h3 className="text-base font-bold text-slate-900">How can I help you today?</h3>
                   <p className="text-xs sm:text-sm text-slate-500 mt-1 leading-relaxed">
-                    Tell me what is wrong in plain English, Hindi, or Odia. I will summarize it, mark its urgency, and log it to the committee dashboard.
+                    Tell me what is wrong, request a handyman, or ask about society bylaws in plain English, Hindi, or Odia.
                   </p>
                 </div>
 
@@ -346,6 +478,12 @@ export function AIAssistant() {
                           : 'bg-white text-slate-800 border border-slate-200/80 rounded-bl-none'
                       }`}
                     >
+                      {msg.transcript && (
+                        <p className="text-[11px] font-semibold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg mb-2">
+                          Transcript: "{msg.transcript}"
+                        </p>
+                      )}
+
                       <p className="whitespace-pre-wrap">{msg.text}</p>
 
                       {/* Multilingual Local Translation if available */}
@@ -358,6 +496,40 @@ export function AIAssistant() {
                             </span>
                             <span className="leading-relaxed">{msg.replyLocal}</span>
                           </div>
+                        </div>
+                      )}
+
+                      {/* Quick Mode Retry Chips when intent wasn't understood */}
+                      {msg.understood === false && msg.originalPrompt && (
+                        <div className="mt-3 pt-2.5 border-t border-slate-100 flex flex-wrap items-center gap-1.5">
+                          <span className="text-[11px] text-slate-400 mr-1">Try instead:</span>
+                          {msg.sentType !== 'complaint' && (
+                            <button
+                              type="button"
+                              onClick={() => handleSendMessage(msg.originalPrompt, null, 'complaint')}
+                              className="px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 text-[11px] font-semibold hover:bg-rose-100 transition-colors"
+                            >
+                              Log as Complaint
+                            </button>
+                          )}
+                          {msg.sentType !== 'service' && (
+                            <button
+                              type="button"
+                              onClick={() => handleSendMessage(msg.originalPrompt, null, 'service')}
+                              className="px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 text-[11px] font-semibold hover:bg-indigo-100 transition-colors"
+                            >
+                              Request Handyman
+                            </button>
+                          )}
+                          {msg.sentType !== 'rules' && (
+                            <button
+                              type="button"
+                              onClick={() => handleSendMessage(msg.originalPrompt, null, 'rules')}
+                              className="px-2.5 py-1 rounded-lg bg-purple-50 text-purple-700 text-[11px] font-semibold hover:bg-purple-100 transition-colors"
+                            >
+                              Ask Rulebook
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
@@ -416,6 +588,48 @@ export function AIAssistant() {
                         </div>
                       </div>
                     )}
+
+                    {/* Rich Outcome: Announcement Created Card */}
+                    {msg.announcement && (
+                      <div className="p-4 bg-amber-50/90 border border-amber-200 rounded-2xl shadow-sm space-y-2 animate-in zoom-in-95 duration-150">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
+                            <Megaphone className="w-3.5 h-3.5 text-amber-600" />
+                            Notice Published
+                          </span>
+                          {msg.announcement.is_pinned && (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 flex items-center gap-1">
+                              <Pin className="w-3 h-3" /> Pinned
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs font-bold text-slate-900">{msg.announcement.title}</p>
+                        <p className="text-xs text-slate-700 line-clamp-2">{msg.announcement.message}</p>
+                        <div className="pt-1 flex justify-end">
+                          <Link
+                            to="/management/announcements"
+                            className="text-xs font-bold text-amber-800 hover:underline flex items-center gap-1"
+                          >
+                            Manage Announcements <ArrowRight className="w-3 h-3" />
+                          </Link>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Rich Outcome: Dues Reminders Dispatched */}
+                    {msg.reminders && msg.reminders.length > 0 && (
+                      <div className="p-4 bg-emerald-50/90 border border-emerald-200 rounded-2xl shadow-sm space-y-2">
+                        <span className="text-xs font-bold text-emerald-900 flex items-center gap-1.5">
+                          <Bell className="w-3.5 h-3.5 text-emerald-600" />
+                          Dues Reminder Sent ({msg.reminders.length})
+                        </span>
+                        {msg.reminders.map((r, rIdx) => (
+                          <div key={rIdx} className="text-xs text-slate-700 bg-white/80 p-2 rounded-lg border border-emerald-200/60">
+                            <strong className="text-slate-900">{r.name}:</strong> {r.reminder}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   {msg.role === 'user' && (
@@ -435,7 +649,7 @@ export function AIAssistant() {
                 </div>
                 <div className="px-4 py-3 bg-white border border-slate-200 rounded-2xl rounded-bl-none shadow-sm flex items-center gap-2">
                   <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />
-                  <span className="text-xs font-medium text-slate-500">Gemini is analyzing your request…</span>
+                  <span className="text-xs font-medium text-slate-500">AI Assistant is analyzing your request…</span>
                 </div>
               </div>
             )}
@@ -444,10 +658,10 @@ export function AIAssistant() {
           </div>
 
           {/* Input Bar Section */}
-          <div className="p-4 bg-white border-t border-slate-200/80 space-y-2 shrink-0">
+          <div className="p-4 bg-white border-t border-slate-200/80 space-y-2.5 shrink-0">
             {/* Mode-specific Option Toggles */}
             <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-              {selectedType === 'complaint' && (
+              {(selectedType === 'complaint' || selectedType === 'auto') && (
                 <label className="flex items-center gap-1.5 cursor-pointer text-slate-600 font-medium">
                   <input
                     type="checkbox"
@@ -455,22 +669,23 @@ export function AIAssistant() {
                     onChange={(e) => setAnonymous(e.target.checked)}
                     className="rounded text-blue-600 focus:ring-blue-500"
                   />
-                  <span>Submit as Anonymous complaint</span>
+                  <span>Submit complaint anonymously (hides unit from neighbors)</span>
                 </label>
               )}
 
               {selectedType === 'committee_action' && (
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-3">
                   <select
                     value={committeeAction}
                     onChange={(e) => setCommitteeAction(e.target.value)}
-                    className="px-2 py-1 text-xs border rounded-lg"
+                    className="px-2.5 py-1.5 text-xs font-semibold border border-slate-200 rounded-lg bg-white"
                   >
                     <option value="announcement">Publish Announcement</option>
                     <option value="dues_reminder">Send Dues Reminder</option>
                   </select>
-                  {committeeAction === 'announcement' && (
-                    <label className="flex items-center gap-1 cursor-pointer text-slate-600">
+
+                  {committeeAction === 'announcement' ? (
+                    <label className="flex items-center gap-1.5 cursor-pointer text-slate-600 font-medium">
                       <input
                         type="checkbox"
                         checked={pinAnnouncement}
@@ -479,6 +694,23 @@ export function AIAssistant() {
                       />
                       <span>Pin to Top</span>
                     </label>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={reminderBlock}
+                        onChange={(e) => setReminderBlock(e.target.value)}
+                        placeholder="Block (e.g. A)"
+                        className="w-24 px-2.5 py-1 text-xs border border-slate-300 rounded-lg"
+                      />
+                      <input
+                        type="text"
+                        value={reminderFlat}
+                        onChange={(e) => setReminderFlat(e.target.value)}
+                        placeholder="Flat (e.g. 204)"
+                        className="w-24 px-2.5 py-1 text-xs border border-slate-300 rounded-lg"
+                      />
+                    </div>
                   )}
                 </div>
               )}
@@ -500,13 +732,28 @@ export function AIAssistant() {
                 }}
                 className="flex items-center gap-2"
               >
+                {speechSupported && (
+                  <button
+                    type="button"
+                    onClick={toggleDictation}
+                    className={`p-2.5 rounded-xl border transition-colors ${
+                      isDictating
+                        ? 'bg-blue-600 border-blue-600 text-white animate-pulse'
+                        : 'border-slate-200 text-slate-500 hover:text-blue-600 hover:bg-blue-50'
+                    }`}
+                    title={isDictating ? 'Stop live voice dictation' : 'Live voice-to-text dictation'}
+                  >
+                    {isDictating ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+                  </button>
+                )}
+
                 <button
                   type="button"
                   onClick={() => setIsRecording(true)}
                   className="p-2.5 rounded-xl border border-slate-200 text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                  title="Record voice note"
+                  title="Record audio voice note attachment"
                 >
-                  <Mic className="w-5 h-5" />
+                  <AudioLines className="w-5 h-5" />
                 </button>
 
                 <div className="relative flex-1">
@@ -515,12 +762,18 @@ export function AIAssistant() {
                     value={inputText}
                     onChange={(e) => setInputText(e.target.value)}
                     placeholder={
-                      selectedType === 'complaint'
+                      isDictating
+                        ? 'Listening… speak now'
+                        : selectedType === 'auto'
+                        ? 'Describe a complaint, request a service, or ask about society rules…'
+                        : selectedType === 'complaint'
                         ? 'Describe the problem (e.g. lift in Block B making squeaking sound)…'
                         : selectedType === 'service'
                         ? 'Which service is needed (e.g. call plumber for leaky tap)…'
                         : selectedType === 'rules'
                         ? 'Ask a question about society rules and bylaws…'
+                        : committeeAction === 'dues_reminder'
+                        ? 'Add an optional note for the resident dues reminder…'
                         : 'Draft announcement text for the society…'
                     }
                     className="w-full pl-4 pr-10 py-3 text-sm bg-slate-50/80 border border-slate-200 rounded-2xl focus:bg-white focus:border-blue-600 focus:ring-1 focus:ring-blue-600 transition-all"

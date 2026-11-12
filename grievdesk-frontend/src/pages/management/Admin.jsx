@@ -6,6 +6,7 @@ import {
   UserCheck,
   UserX,
   AlertTriangle,
+  AlertCircle,
   ArrowRight,
   CheckCircle2,
   Lock,

@@ -169,7 +169,7 @@ export function ManagementAnnouncements() {
                 </div>
 
                 <div className="pt-3 border-t border-amber-200/50 flex items-center justify-between text-xs">
-                  <span className="text-amber-900/60 font-medium">By {ann.posted_by_name || 'Management'}</span>
+                  <span className="text-amber-900/60 font-medium">By {ann.posted_by || ann.posted_by_name || 'Management'}</span>
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => handleTogglePin(ann)}
@@ -270,7 +270,7 @@ export function ManagementAnnouncements() {
                 </p>
 
                 <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400">
-                  <span>Author: {ann.posted_by_name || 'Management'}</span>
+                  <span>Author: {ann.posted_by || ann.posted_by_name || 'Management'}</span>
                   <span className="flex items-center gap-1">
                     <Clock className="w-3 h-3" />
                     {ann.created_at ? new Date(ann.created_at).toLocaleDateString() : ''}

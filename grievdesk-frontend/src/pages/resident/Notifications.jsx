@@ -32,6 +32,7 @@ export function ResidentNotifications() {
         prev.map((n) => (n.id === id ? { ...n, is_read: true } : n))
       )
       setUnreadCount((prev) => Math.max(0, prev - 1))
+      window.dispatchEvent(new Event('grievdesk:refresh-counts'))
     } catch {
       // Ignored
     }
@@ -43,6 +44,7 @@ export function ResidentNotifications() {
       toast.success('All notifications marked as read.')
       setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })))
       setUnreadCount(0)
+      window.dispatchEvent(new Event('grievdesk:refresh-counts'))
     } catch {
       toast.error('Failed to mark all as read.')
     }

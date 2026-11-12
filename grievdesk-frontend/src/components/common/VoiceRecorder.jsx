@@ -1,26 +1,48 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { Mic, Square, Trash2, Check, AlertCircle } from 'lucide-react'
 
+const PREFERRED_MIMES = [
+  { mime: 'audio/webm;codecs=opus', ext: '.webm' },
+  { mime: 'audio/webm', ext: '.webm' },
+  { mime: 'audio/ogg;codecs=opus', ext: '.ogg' },
+  { mime: 'audio/ogg', ext: '.ogg' },
+  { mime: 'audio/mp4', ext: '.mp4' },
+]
+
 export function VoiceRecorder({ onRecordingComplete, onCancel }) {
   const [isRecording, setIsRecording] = useState(false)
   const [recordingTime, setRecordingTime] = useState(0)
   const [audioBlob, setAudioBlob] = useState(null)
   const [audioUrl, setAudioUrl] = useState(null)
+  const [recordedExt, setRecordedExt] = useState('.webm')
   const [error, setError] = useState(null)
 
   const mediaRecorderRef = useRef(null)
+  const streamRef = useRef(null)
   const audioChunksRef = useRef([])
   const timerRef = useRef(null)
+  const audioUrlRef = useRef(null)
+
+  useEffect(() => {
+    audioUrlRef.current = audioUrl
+  }, [audioUrl])
 
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current)
-      if (audioUrl) URL.revokeObjectURL(audioUrl)
+      if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current)
       if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-        mediaRecorderRef.current.stop()
+        try {
+          mediaRecorderRef.current.stop()
+        } catch {
+          // Ignore unmount stop errors
+        }
+      }
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop())
       }
     }
-  }, [audioUrl])
+  }, [])
 
   const startRecording = async () => {
     setError(null)
@@ -29,17 +51,30 @@ export function VoiceRecorder({ onRecordingComplete, onCancel }) {
     setAudioUrl(null)
     audioChunksRef.current = []
 
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      setError('Audio recording is not supported in this browser. Try live voice dictation instead.')
+      return
+    }
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      streamRef.current = stream
 
-      let mimeType = 'audio/webm'
-      if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
-        mimeType = 'audio/webm;codecs=opus'
-      } else if (MediaRecorder.isTypeSupported('audio/ogg;codecs=opus')) {
-        mimeType = 'audio/ogg;codecs=opus'
+      let chosen = null
+      if (typeof MediaRecorder.isTypeSupported === 'function') {
+        chosen = PREFERRED_MIMES.find((m) => MediaRecorder.isTypeSupported(m.mime)) || null
       }
 
-      const mediaRecorder = new MediaRecorder(stream, { mimeType })
+      const mediaRecorder = chosen
+        ? new MediaRecorder(stream, { mimeType: chosen.mime })
+        : new MediaRecorder(stream)
+
+      const actualMime = mediaRecorder.mimeType || chosen?.mime || 'audio/webm'
+      const ext =
+        chosen?.ext ||
+        (actualMime.includes('mp4') ? '.mp4' : actualMime.includes('ogg') ? '.ogg' : '.webm')
+      setRecordedExt(ext)
+
       mediaRecorderRef.current = mediaRecorder
 
       mediaRecorder.ondataavailable = (event) => {
@@ -50,7 +85,8 @@ export function VoiceRecorder({ onRecordingComplete, onCancel }) {
 
       mediaRecorder.onstop = () => {
         stream.getTracks().forEach((track) => track.stop())
-        const blob = new Blob(audioChunksRef.current, { type: mimeType })
+        streamRef.current = null
+        const blob = new Blob(audioChunksRef.current, { type: actualMime })
         setAudioBlob(blob)
         setAudioUrl(URL.createObjectURL(blob))
       }
@@ -62,8 +98,8 @@ export function VoiceRecorder({ onRecordingComplete, onCancel }) {
       timerRef.current = setInterval(() => {
         setRecordingTime((t) => t + 1)
       }, 1000)
-    } catch (err) {
-      setError('Microphone access was denied or is not supported in this browser.')
+    } catch {
+      setError('Microphone access was denied or no microphone was found.')
     }
   }
 
@@ -86,7 +122,9 @@ export function VoiceRecorder({ onRecordingComplete, onCancel }) {
 
   const handleConfirm = () => {
     if (audioBlob) {
-      const file = new File([audioBlob], 'voice_note.webm', { type: audioBlob.type })
+      const file = new File([audioBlob], `voice_note${recordedExt}`, {
+        type: audioBlob.type || 'audio/webm',
+      })
       onRecordingComplete(audioBlob, file)
     }
   }
@@ -102,7 +140,7 @@ export function VoiceRecorder({ onRecordingComplete, onCancel }) {
       <div className="flex items-center justify-between gap-3">
         {!isRecording && !audioBlob ? (
           <div className="flex items-center justify-between w-full">
-            <span className="text-xs text-slate-300">Click to record voice complaint</span>
+            <span className="text-xs text-slate-300">Record an audio voice note to attach to your complaint</span>
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -165,7 +203,7 @@ export function VoiceRecorder({ onRecordingComplete, onCancel }) {
                 onClick={handleConfirm}
                 className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-white transition-colors"
               >
-                <Check className="w-3.5 h-3.5" /> Attach
+                <Check className="w-3.5 h-3.5" /> Send Voice Note
               </button>
               <button
                 type="button"

@@ -216,7 +216,7 @@ export function ResidentAmenities() {
                 ) : (
                   myBookings.map((b) => (
                     <tr key={b.id} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="px-4 py-3.5 font-bold text-slate-900">{b.amenity_name}</td>
+                      <td className="px-4 py-3.5 font-bold text-slate-900">{b.amenity || b.amenity_name || 'Facility'}</td>
                       <td className="px-4 py-3.5 text-slate-600">{b.date}</td>
                       <td className="px-4 py-3.5 font-mono text-xs text-slate-600">
                         {b.start_time} - {b.end_time}

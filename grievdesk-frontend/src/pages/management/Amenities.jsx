@@ -207,7 +207,7 @@ export function ManagementAmenities() {
                           #{b.id}
                         </td>
                         <td className="px-4 py-3.5 font-semibold text-slate-900 whitespace-nowrap">
-                          {b.amenity_name}
+                          {b.amenity || b.amenity_name || 'Facility'}
                         </td>
                         <td className="px-4 py-3.5 text-xs text-slate-600 whitespace-nowrap">
                           {b.date}
@@ -216,7 +216,10 @@ export function ManagementAmenities() {
                           {b.start_time} - {b.end_time}
                         </td>
                         <td className="px-4 py-3.5 text-xs text-slate-700 whitespace-nowrap">
-                          {b.user_name || 'Resident'}
+                          <span className="font-semibold text-slate-900 block">{b.booked_by || b.user_name || 'Resident'}</span>
+                          {(b.block_no || b.flat_no) && (
+                            <span className="text-slate-500">Block {b.block_no} · Flat {b.flat_no}</span>
+                          )}
                         </td>
                         <td className="px-4 py-3.5 whitespace-nowrap">
                           <Badge variant={b.status} size="sm" />

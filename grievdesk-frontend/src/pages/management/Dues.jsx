@@ -289,7 +289,7 @@ export function ManagementDues() {
                     </td>
                     <td className="px-4 py-3.5 text-xs text-slate-700 whitespace-nowrap">
                       <span className="font-semibold block text-slate-900">
-                        {d.resident_name || 'Resident'}
+                        {d.resident || d.resident_name || 'Resident'}
                       </span>
                       <span className="text-slate-500">
                         Block {d.block_no} · Flat {d.flat_no}

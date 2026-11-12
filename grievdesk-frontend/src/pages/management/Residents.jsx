@@ -160,14 +160,14 @@ export function ManagementResidents() {
               {loading ? (
                 Array.from({ length: 5 }).map((_, idx) => (
                   <tr key={idx} className="animate-pulse">
-                    <td colSpan={6} className="px-4 py-4">
+                    <td colSpan={isSecretary ? 6 : 5} className="px-4 py-4">
                       <div className="h-4 bg-slate-200 rounded w-full" />
                     </td>
                   </tr>
                 ))
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-12 text-center text-muted-foreground text-xs">
+                  <td colSpan={isSecretary ? 6 : 5} className="px-4 py-12 text-center text-muted-foreground text-xs">
                     No community members match your filter.
                   </td>
                 </tr>

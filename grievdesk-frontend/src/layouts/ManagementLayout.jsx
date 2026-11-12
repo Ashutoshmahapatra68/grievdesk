@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { NavLink, Outlet, Link, Navigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
@@ -35,13 +35,10 @@ export function ManagementLayout() {
   const [unreadCount, setUnreadCount] = useState(0)
   const [langDropdownOpen, setLangDropdownOpen] = useState(false)
   const [userDropdownOpen, setUserDropdownOpen] = useState(false)
+  const dropdownContainerRef = useRef(null)
 
-  // Non-staff members are unauthorized for management layout
-  if (!isStaff) {
-    return <Navigate to="/resident" replace />
-  }
-
-  useEffect(() => {
+  const refreshCounts = useCallback(() => {
+    if (!isStaff) return
     notificationApi.getMyNotifications({ limit: 5 })
       .then((res) => setUnreadCount(res.unread_count || 0))
       .catch(() => {})
@@ -53,7 +50,41 @@ export function ManagementLayout() {
         })
         .catch(() => {})
     }
-  }, [isSecretary])
+  }, [isStaff, isSecretary])
+
+  useEffect(() => {
+    refreshCounts()
+    const handler = () => refreshCounts()
+    window.addEventListener('grievdesk:refresh-counts', handler)
+    return () => window.removeEventListener('grievdesk:refresh-counts', handler)
+  }, [refreshCounts])
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (dropdownContainerRef.current && !dropdownContainerRef.current.contains(e.target)) {
+        setLangDropdownOpen(false)
+        setUserDropdownOpen(false)
+      }
+    }
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setLangDropdownOpen(false)
+        setUserDropdownOpen(false)
+        setMobileMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [])
+
+  // Non-staff members are unauthorized for management layout
+  if (!isStaff) {
+    return <Navigate to="/resident" replace />
+  }
 
   const navItems = [
     { to: '/management', icon: LayoutDashboard, label: 'Overview', end: true },
@@ -196,10 +227,10 @@ export function ManagementLayout() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div ref={dropdownContainerRef} className="flex items-center gap-2 sm:gap-3">
             {/* Global Search */}
             <Link
-              to="/resident/search"
+              to="/management/search"
               className="flex items-center gap-2 px-3 py-1.5 text-xs text-slate-500 bg-slate-100 hover:bg-slate-200/80 rounded-xl transition-colors"
             >
               <Search className="w-3.5 h-3.5 text-slate-400" />
@@ -209,7 +240,10 @@ export function ManagementLayout() {
             {/* Language Selector */}
             <div className="relative">
               <button
-                onClick={() => setLangDropdownOpen(!langDropdownOpen)}
+                onClick={() => {
+                  setLangDropdownOpen(!langDropdownOpen)
+                  setUserDropdownOpen(false)
+                }}
                 className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 rounded-xl transition-colors"
               >
                 <Globe className="w-3.5 h-3.5 text-slate-500" />
@@ -237,7 +271,7 @@ export function ManagementLayout() {
 
             {/* Notifications */}
             <Link
-              to="/resident/notifications"
+              to="/management/notifications"
               className="relative p-2 text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
               title="Notifications"
             >
@@ -254,7 +288,10 @@ export function ManagementLayout() {
             {/* User Dropdown */}
             <div className="relative">
               <button
-                onClick={() => setUserDropdownOpen(!userDropdownOpen)}
+                onClick={() => {
+                  setUserDropdownOpen(!userDropdownOpen)
+                  setLangDropdownOpen(false)
+                }}
                 className="flex items-center gap-2 p-1.5 rounded-xl hover:bg-slate-100 transition-colors"
               >
                 <div className="w-8 h-8 rounded-full bg-slate-900 text-white font-bold flex items-center justify-center text-xs">

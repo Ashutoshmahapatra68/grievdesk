@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { NavLink, Outlet, Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
@@ -28,7 +28,7 @@ import { SOCIETY_NAME, LANGUAGES } from '@/lib/constants'
 
 const RESIDENT_NAV = [
   { to: '/resident', icon: LayoutDashboard, label: 'Overview', end: true },
-  { to: '/resident/ai-assistant', icon: MessageSquarePlus, label: 'AI Assistant', badge: 'Gemini' },
+  { to: '/resident/ai-assistant', icon: MessageSquarePlus, label: 'AI Assistant', badge: 'AI' },
   { to: '/resident/complaints', icon: AlertTriangle, label: 'My Complaints' },
   { to: '/resident/tickets', icon: Ticket, label: 'My Tickets' },
   { to: '/resident/announcements', icon: Megaphone, label: 'Announcements' },
@@ -46,13 +46,43 @@ export function ResidentLayout() {
   const [userDropdownOpen, setUserDropdownOpen] = useState(false)
   const [langDropdownOpen, setLangDropdownOpen] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
+  const dropdownContainerRef = useRef(null)
 
-  useEffect(() => {
+  const refreshCounts = useCallback(() => {
     notificationApi.getMyNotifications({ limit: 5 })
       .then((res) => {
         setUnreadCount(res.unread_count || 0)
       })
       .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    refreshCounts()
+    const handler = () => refreshCounts()
+    window.addEventListener('grievdesk:refresh-counts', handler)
+    return () => window.removeEventListener('grievdesk:refresh-counts', handler)
+  }, [refreshCounts])
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (dropdownContainerRef.current && !dropdownContainerRef.current.contains(e.target)) {
+        setLangDropdownOpen(false)
+        setUserDropdownOpen(false)
+      }
+    }
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setLangDropdownOpen(false)
+        setUserDropdownOpen(false)
+        setMobileMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
   }, [])
 
   const handleLanguageChange = (code) => {
@@ -160,7 +190,7 @@ export function ResidentLayout() {
             </span>
           </div>
 
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div ref={dropdownContainerRef} className="flex items-center gap-2 sm:gap-3">
             {/* Search Trigger */}
             <Link
               to="/resident/search"
@@ -173,7 +203,10 @@ export function ResidentLayout() {
             {/* Language Switcher */}
             <div className="relative">
               <button
-                onClick={() => setLangDropdownOpen(!langDropdownOpen)}
+                onClick={() => {
+                  setLangDropdownOpen(!langDropdownOpen)
+                  setUserDropdownOpen(false)
+                }}
                 className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 rounded-xl transition-colors"
               >
                 <Globe className="w-3.5 h-3.5 text-slate-500" />
@@ -218,7 +251,10 @@ export function ResidentLayout() {
             {/* User Dropdown */}
             <div className="relative">
               <button
-                onClick={() => setUserDropdownOpen(!userDropdownOpen)}
+                onClick={() => {
+                  setUserDropdownOpen(!userDropdownOpen)
+                  setLangDropdownOpen(false)
+                }}
                 className="flex items-center gap-2 p-1.5 rounded-xl hover:bg-slate-100 transition-colors"
               >
                 <div className="w-8 h-8 rounded-full bg-slate-900 text-white font-bold flex items-center justify-center text-xs">

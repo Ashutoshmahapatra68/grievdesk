@@ -226,7 +226,7 @@ export function ManagementRules() {
               <div className="flex items-center justify-between text-xs">
                 <span className="font-bold text-slate-700 uppercase">AI Answer Status: {testResponse.status}</span>
                 <span className="text-[10px] text-blue-600 bg-blue-50 px-2 py-0.5 rounded font-mono">
-                  Gemini Flash
+                  GrievDesk AI
                 </span>
               </div>
               <p className="text-sm text-slate-800 leading-relaxed whitespace-pre-wrap">
