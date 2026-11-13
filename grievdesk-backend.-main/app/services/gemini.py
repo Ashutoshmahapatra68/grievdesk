@@ -1,8 +1,10 @@
 import json
 import re
+from flask import current_app
 from google.genai import types
 
 from app.services.gemini_client import generate, GeminiNotConfigured, GeminiCallFailed  # noqa: F401  (re-exported)
+from app.services import local_ai
 
 from app.models.complaint import ComplaintCategory, Severity
 from app.models.service_request import ServiceType
@@ -110,29 +112,51 @@ def _call_model(prompt: str, json_mode: bool = False) -> str:
 
 
 def _strip_code_fences(text: str) -> str:
-    """Models occasionally wrap JSON in ```json fences even when told not to."""
-    text = text.strip()
-    if text.startswith("```"):
-        text = text.split("```")[1]
-        if text.startswith("json"):
-            text = text[4:]
+    """Models occasionally wrap JSON in ```json fences or prose even when told not to."""
+    text = (text or "").strip()
+    if "```" in text:
+        parts = text.split("```")
+        if len(parts) >= 2:
+            candidate = parts[1].strip()
+            if candidate.lower().startswith("json"):
+                candidate = candidate[4:].strip()
+            text = candidate
     return text.strip()
 
 
 def _parse_json_object(raw: str):
-    """Returns a dict, or None if the model's output isn't a JSON object."""
+    """Returns a dict, extracting an embedded JSON object if surrounded by extra text."""
+    cleaned = _strip_code_fences(raw)
     try:
-        parsed = json.loads(_strip_code_fences(raw))
+        parsed = json.loads(cleaned)
+        if isinstance(parsed, dict):
+            return parsed
     except (json.JSONDecodeError, TypeError):
-        return None
-    return parsed if isinstance(parsed, dict) else None
+        pass
+
+    # Regex fallback: find outermost {...} object inside prose
+    match = re.search(r"\{.*\}", cleaned, re.DOTALL)
+    if match:
+        try:
+            parsed = json.loads(match.group(0))
+            return parsed if isinstance(parsed, dict) else None
+        except (json.JSONDecodeError, TypeError):
+            return None
+    return None
 
 
 NOT_UNDERSTOOD = {"error": "not_understood"}
 
 
+def _log_fallback(task: str, exc: Exception):
+    try:
+        current_app.logger.info("Using built-in local AI for %s (%s)", task, type(exc).__name__)
+    except RuntimeError:
+        pass
+
+
 # ---------------------------------------------------------------------------
-# Task functions — one per prompt in the design doc
+# Task functions — primary Gemini with automatic local AI fallback
 # ---------------------------------------------------------------------------
 
 def classify_complaint(translated_text: str) -> dict:
@@ -141,8 +165,15 @@ def classify_complaint(translated_text: str) -> dict:
         categories=list(ComplaintCategory.ALL),
         severities=list(Severity.ALL),
     )
-    parsed = _parse_json_object(_call_model(prompt, json_mode=True))
-    if not parsed or "error" in parsed:
+    try:
+        parsed = _parse_json_object(_call_model(prompt, json_mode=True))
+    except (GeminiNotConfigured, GeminiCallFailed) as exc:
+        _log_fallback("classify_complaint", exc)
+        return local_ai.classify_complaint(translated_text)
+
+    if not parsed:
+        return local_ai.classify_complaint(translated_text)
+    if "error" in parsed:
         return dict(NOT_UNDERSTOOD)
 
     # Never trust model output blindly — clamp to the allowed values.
@@ -164,8 +195,15 @@ def structure_service_request(translated_text: str) -> dict:
         translated_text=translated_text,
         service_types=list(ServiceType.ALL),
     )
-    parsed = _parse_json_object(_call_model(prompt, json_mode=True))
-    if not parsed or "error" in parsed:
+    try:
+        parsed = _parse_json_object(_call_model(prompt, json_mode=True))
+    except (GeminiNotConfigured, GeminiCallFailed) as exc:
+        _log_fallback("structure_service_request", exc)
+        return local_ai.structure_service_request(translated_text)
+
+    if not parsed:
+        return local_ai.structure_service_request(translated_text)
+    if "error" in parsed:
         return dict(NOT_UNDERSTOOD)
     # Unlike complaints there is no sensible "Other" — an unknown service type means we didn't understand.
     if parsed.get("service_type") not in ServiceType.ALL:
@@ -177,7 +215,12 @@ def structure_service_request(translated_text: str) -> dict:
 def answer_rules_question(rulebook_text: str, question: str) -> dict:
     """Returns {"answer": str} or {"error": "not_understood"}."""
     prompt = RULES_PROMPT.format(rulebook=rulebook_text, question=question)
-    answer = _call_model(prompt)
+    try:
+        answer = _call_model(prompt)
+    except (GeminiNotConfigured, GeminiCallFailed) as exc:
+        _log_fallback("answer_rules_question", exc)
+        return local_ai.answer_rules_question(rulebook_text, question)
+
     if not answer or answer.strip().upper().startswith(RULES_NOT_UNDERSTOOD):
         return dict(NOT_UNDERSTOOD)
     return {"answer": answer}
@@ -186,8 +229,15 @@ def answer_rules_question(rulebook_text: str, question: str) -> dict:
 def draft_announcement(raw_text: str) -> dict:
     """Returns {"title", "message"} or {"error": "not_understood"}."""
     prompt = ANNOUNCEMENT_PROMPT.format(raw_text=raw_text)
-    parsed = _parse_json_object(_call_model(prompt, json_mode=True))
-    if not parsed or "error" in parsed:
+    try:
+        parsed = _parse_json_object(_call_model(prompt, json_mode=True))
+    except (GeminiNotConfigured, GeminiCallFailed) as exc:
+        _log_fallback("draft_announcement", exc)
+        return local_ai.draft_announcement(raw_text)
+
+    if not parsed:
+        return local_ai.draft_announcement(raw_text)
+    if "error" in parsed:
         return dict(NOT_UNDERSTOOD)
     title = str(parsed.get("title") or "").strip()
     message = str(parsed.get("message") or "").strip()
@@ -200,7 +250,11 @@ def draft_dues_reminder(flat_no: str, months: list, total: str, note: str) -> st
     prompt = REMINDER_PROMPT.format(
         flat_no=flat_no, months=", ".join(months), total=total, note=note,
     )
-    return _call_model(prompt)
+    try:
+        return _call_model(prompt)
+    except (GeminiNotConfigured, GeminiCallFailed) as exc:
+        _log_fallback("draft_dues_reminder", exc)
+        return local_ai.draft_dues_reminder(flat_no, months, total, note)
 
 
 def translate_texts(texts: list, language: str):

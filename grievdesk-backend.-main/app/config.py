@@ -11,9 +11,9 @@ class Config:
 
     GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
     # Model names get deprecated regularly — keep it in .env, not hardcoded.
-    GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-1.5-flash")
+    GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
     # Tried in order when the main model is overloaded (503), retired (404) or out of free quota (429).
-    GEMINI_FALLBACK_MODELS = [m.strip() for m in os.environ.get("GEMINI_FALLBACK_MODELS", "gemini-1.5-flash-8b").split(",") if m.strip()]
+    GEMINI_FALLBACK_MODELS = [m.strip() for m in os.environ.get("GEMINI_FALLBACK_MODELS", "gemini-2.0-flash,gemini-2.0-flash-lite").split(",") if m.strip()]
     GEMINI_RETRIES_PER_MODEL = int(os.environ.get("GEMINI_RETRIES_PER_MODEL", "2"))
     GEMINI_TIMEOUT_SECONDS = int(os.environ.get("GEMINI_TIMEOUT_SECONDS", "30"))
 
