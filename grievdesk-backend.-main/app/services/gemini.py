@@ -76,6 +76,27 @@ If the note is not an announcement or notice for residents, return exactly:
 {{"error": "not_understood"}}
 """
 
+REFINE_ANNOUNCEMENT_PROMPT = """You are revising an existing residential society notice for residents.
+Current notice title: "{current_title}"
+Current notice text: "{current_message}"
+
+Revision instruction: {instruction}
+Target tone: {tone_instruction}
+
+Rules for the revision:
+- Rewrite the notice from scratch to completely replace the previous version.
+- Do NOT repeat, concatenate, or duplicate sentences from the previous version.
+- Apply the requested tone and style thoroughly to both the headline title and the body message.
+- Retain all essential factual details (dates, times, locations, contact info, rules).
+- Structure the message with clean paragraphs or bullet points where appropriate.
+
+Return JSON only, no other text, no markdown code fences:
+{{
+  "title": "<revised headline, at most 10 words>",
+  "message": "<the revised notice body text, clean plain text without duplicating previous text>"
+}}
+"""
+
 REMINDER_PROMPT = """Draft a polite, brief reminder to a resident about unpaid maintenance dues.
 Flat: {flat_no}
 Unpaid months: {months}
@@ -246,6 +267,40 @@ def draft_announcement(raw_text: str, tone: str = "formal") -> dict:
 
     if not parsed:
         return local_ai.draft_announcement(raw_text, tone=tone)
+    if "error" in parsed:
+        return dict(NOT_UNDERSTOOD)
+    title = str(parsed.get("title") or "").strip()
+    message = str(parsed.get("message") or "").strip()
+    if not title or not message:
+        return dict(NOT_UNDERSTOOD)
+    return {"title": title[:200], "message": message}
+
+
+def refine_announcement(current_title: str, current_message: str, tone: str = "formal", instruction: str = "") -> dict:
+    """Refines and rewrites an existing announcement into a new tone without sentence duplication."""
+    tone_str = (tone or "formal").lower()
+    if "urgent" in tone_str:
+        style_instruction = "High-priority, urgent alert. Use attention-grabbing alerts (e.g. '⚠️ URGENT:'), clear warning headers, emphasize safety/timings, and provide immediate action items."
+    elif "friendly" in tone_str:
+        style_instruction = "Warm, welcoming, and community-oriented. Use cheerful, hospitable phrasing (e.g. 'Dear Neighbors', '🎉'), inviting active participation."
+    else:
+        style_instruction = "Formal and authoritative. Use official society circular format, structured paragraphs, professional salutation, and official management sign-off."
+
+    user_instruction = (instruction or "").strip() or f"Rewrite this notice into a {tone} tone."
+    prompt = REFINE_ANNOUNCEMENT_PROMPT.format(
+        current_title=current_title,
+        current_message=current_message,
+        instruction=user_instruction,
+        tone_instruction=style_instruction,
+    )
+    try:
+        parsed = _parse_json_object(_call_model(prompt, json_mode=True))
+    except (GeminiNotConfigured, GeminiCallFailed) as exc:
+        _log_fallback("refine_announcement", exc)
+        return local_ai.refine_announcement(current_title, current_message, tone=tone, instruction=instruction)
+
+    if not parsed:
+        return local_ai.refine_announcement(current_title, current_message, tone=tone, instruction=instruction)
     if "error" in parsed:
         return dict(NOT_UNDERSTOOD)
     title = str(parsed.get("title") or "").strip()

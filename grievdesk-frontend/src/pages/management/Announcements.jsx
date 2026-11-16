@@ -160,8 +160,7 @@ export function ManagementAnnouncements() {
 
   // 2. Refine existing draft to a different tone
   const handleRefineTone = async (targetTone) => {
-    const contentToRefine = (draftMessage || draftTitle || announcementPrompt).trim()
-    if (!contentToRefine) {
+    if (!draftMessage.trim() && !draftTitle.trim() && !announcementPrompt.trim()) {
       toast.error('No content available to refine.')
       return
     }
@@ -171,8 +170,11 @@ export function ManagementAnnouncements() {
       const res = await chatApi.sendMessage({
         selected_type: 'committee_action',
         action: 'announcement',
-        text: contentToRefine,
+        title: draftTitle.trim(),
+        message: draftMessage.trim(),
+        text: announcementPrompt.trim(),
         tone: targetTone,
+        refine: true,
         preview: true,
       })
 
@@ -203,14 +205,17 @@ export function ManagementAnnouncements() {
     e?.preventDefault()
     if (!customRefinePrompt.trim()) return
 
-    const combinedText = `Existing Notice:\nTitle: ${draftTitle}\nMessage: ${draftMessage}\n\nModification instruction: ${customRefinePrompt.trim()}`
     setRefiningTone('custom')
     try {
       const res = await chatApi.sendMessage({
         selected_type: 'committee_action',
         action: 'announcement',
-        text: combinedText,
+        title: draftTitle.trim(),
+        message: draftMessage.trim(),
+        instruction: customRefinePrompt.trim(),
+        text: customRefinePrompt.trim(),
         tone: aiTone,
+        refine: true,
         preview: true,
       })
 

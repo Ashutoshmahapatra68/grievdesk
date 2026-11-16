@@ -28,6 +28,8 @@ export const chatApi = {
     tone,
     title,
     message,
+    refine,
+    instruction,
   }) => {
     if (audio) {
       const formData = new FormData()
@@ -43,6 +45,8 @@ export const chatApi = {
       if (tone) formData.append('tone', tone)
       if (title) formData.append('title', title)
       if (message) formData.append('message', message)
+      if (refine !== undefined) formData.append('refine', refine ? 'true' : 'false')
+      if (instruction) formData.append('instruction', instruction)
 
       return postForm('/api/chat/message', formData)
     }
@@ -61,6 +65,8 @@ export const chatApi = {
     if (tone) payload.tone = tone
     if (title) payload.title = title
     if (message) payload.message = message
+    if (refine !== undefined) payload.refine = !!refine
+    if (instruction) payload.instruction = instruction
 
     return post('/api/chat/message', payload)
   },

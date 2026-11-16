@@ -375,6 +375,32 @@ def draft_announcement(raw_text: str, tone: str = "formal") -> dict:
     return {"title": title, "message": message, "_engine": "local_ai"}
 
 
+def refine_announcement(current_title: str, current_message: str, tone: str = "formal", instruction: str = "") -> dict:
+    # Extract the core sentences from current_message, ignoring previous headers/footers
+    lines = [l.strip() for l in (current_message or "").split("\n") if l.strip()]
+    content_lines = []
+    for line in lines:
+        lower = line.lower()
+        if any(h in lower for h in ["attention all residents", "dear residents", "dear neighbors", "thank you for your cooperation", "society management", "society community", "warm regards", "please take note and plan accordingly"]):
+            continue
+        if line.startswith("•") or line.startswith("-") or line.startswith("⚠️") or line.startswith("🎉"):
+            clean_l = re.sub(r"^[•\-⚠️🎉\s]+", "", line).strip()
+            if clean_l and not any(k in clean_l.lower() for k in ["contact the security", "please take necessary"]):
+                content_lines.append(clean_l)
+        else:
+            content_lines.append(line)
+
+    core_text = " ".join(content_lines).strip()
+    if not core_text:
+        clean_title = re.sub(r"^(⚠️\s*URGENT:?|Notice:?|🎉\s*|Circular:?|Official Notice:?)\s*", "", current_title or "", flags=re.IGNORECASE).strip()
+        core_text = clean_title or current_message
+
+    if instruction and instruction.strip():
+        core_text = f"{core_text}. {instruction.strip()}"
+
+    return draft_announcement(core_text, tone=tone)
+
+
 def draft_dues_reminder(flat_no: str, months: list, total: str, note: str) -> str:
     months_str = ", ".join(months) if months else "pending cycles"
     extra = f" Note from Management: {note.strip()}" if note and note.strip() else ""

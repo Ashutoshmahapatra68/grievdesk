@@ -153,15 +153,24 @@ def _announcement(user, text, data):
     db = get_db()
 
     is_preview = bool(data.get("preview") or data.get("draft_only"))
+    is_refine = bool(data.get("refine") or data.get("action_type") == "refine")
     approved_title = (data.get("title") or "").strip()
     approved_message = (data.get("message") or "").strip()
 
     # If client passed already approved title & message AND this is the final broadcast (not a preview refine)
-    if approved_title and approved_message and not is_preview:
+    if approved_title and approved_message and not is_preview and not is_refine:
         drafted = {"title": approved_title, "message": approved_message}
+    elif is_refine and (approved_title or approved_message):
+        tone = (data.get("tone") or "formal").strip()
+        instruction = (data.get("instruction") or text or "").strip()
+        drafted = gemini.refine_announcement(
+            current_title=approved_title,
+            current_message=approved_message,
+            tone=tone,
+            instruction=instruction,
+        )
     else:
         tone = (data.get("tone") or "formal").strip()
-        # Content to draft: prefer raw text or current message/title
         content_to_draft = text or approved_message or approved_title
         drafted = gemini.draft_announcement(content_to_draft, tone=tone)
         if drafted.get("error") == "not_understood":
