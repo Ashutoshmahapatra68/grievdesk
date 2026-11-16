@@ -1,14 +1,19 @@
 import React, { useState, useEffect } from 'react'
 import {
   Megaphone,
-  Plus,
   Pin,
   Trash2,
   Edit2,
-  Search,
   Sparkles,
   Clock,
-  AlertCircle,
+  RefreshCw,
+  Send,
+  ArrowLeft,
+  Flame,
+  Users,
+  FileText,
+  CheckCircle2,
+  SlidersHorizontal,
 } from 'lucide-react'
 import { announcementApi } from '@/api/announcementApi'
 import { chatApi } from '@/api/chatApi'
@@ -16,17 +21,79 @@ import { useToast } from '@/context/ToastContext'
 import { Modal } from '@/components/common/Modal'
 import { ConfirmDialog } from '@/components/common/ConfirmDialog'
 
+const QUICK_TOPICS = [
+  {
+    label: '💧 Water Outage',
+    prompt: 'Water tank deep cleaning scheduled for Friday 10:00 AM to 3:00 PM. Water supply will be paused across all wings. Please store water in advance.',
+    tone: 'urgent',
+  },
+  {
+    label: '⚡ Lift Inspection',
+    prompt: 'Elevator safety overhaul in Block B on Saturday 2:00 PM to 5:00 PM. Please use Block A service lift or stairs.',
+    tone: 'urgent',
+  },
+  {
+    label: '🏛️ Society AGM',
+    prompt: 'Annual General Body Meeting on Sunday 11:00 AM in the Clubhouse to review audited financials and approve society repairs.',
+    tone: 'formal',
+  },
+  {
+    label: '🎉 Cultural Dinner',
+    prompt: 'Community cultural celebration & grand dinner this Saturday at 7:00 PM in the Central Lawn. All residents and families are welcome.',
+    tone: 'friendly',
+  },
+  {
+    label: '🛡️ Gate Security',
+    prompt: 'Mandatory visitor and delivery vehicle registration at main security gate starting Monday. All residents must approve via intercom.',
+    tone: 'formal',
+  },
+  {
+    label: '🦟 Pest Control',
+    prompt: 'Society-wide mosquito fogging and clubhouse pest control on Thursday morning 8:00 AM. Please keep balcony windows closed.',
+    tone: 'formal',
+  },
+]
+
+const TONE_OPTIONS = [
+  {
+    id: 'formal',
+    name: 'Formal Circular',
+    desc: 'Official, structured society circular with formal salutation & secretary sign-off',
+    icon: FileText,
+    badge: 'Official',
+  },
+  {
+    id: 'urgent',
+    name: 'Urgent Alert',
+    desc: 'High-visibility advisory with bold warnings for outages, repairs & emergencies',
+    icon: Flame,
+    badge: 'High Priority',
+  },
+  {
+    id: 'friendly',
+    name: 'Community & Event',
+    desc: 'Warm and inviting notice for celebrations, gatherings, and general updates',
+    icon: Users,
+    badge: 'Social',
+  },
+]
+
 export function ManagementAnnouncements() {
   const toast = useToast()
   const [pinned, setPinned] = useState([])
   const [general, setGeneral] = useState([])
   const [loading, setLoading] = useState(true)
 
-  // Create Announcement Modal State (Drafted by AI)
+  // AI Notice Studio Modal State
   const [createModalOpen, setCreateModalOpen] = useState(false)
+  const [aiStep, setAiStep] = useState('input') // 'input' | 'preview'
   const [announcementPrompt, setAnnouncementPrompt] = useState('')
+  const [aiTone, setAiTone] = useState('formal') // 'formal' | 'urgent' | 'friendly'
+  const [draftTitle, setDraftTitle] = useState('')
+  const [draftMessage, setDraftMessage] = useState('')
   const [isPinChecked, setIsPinChecked] = useState(false)
-  const [creating, setCreating] = useState(false)
+  const [drafting, setDrafting] = useState(false)
+  const [broadcasting, setBroadcasting] = useState(false)
 
   // Edit Announcement Modal State
   const [editModalOpen, setEditModalOpen] = useState(false)
@@ -54,29 +121,70 @@ export function ManagementAnnouncements() {
     fetchAnnouncements()
   }, [])
 
-  const handleCreateAnnouncement = async (e) => {
-    e.preventDefault()
-    if (!announcementPrompt.trim()) return
+  // 1. Generate Notice Draft via AI
+  const handleGenerateDraft = async (overridePrompt, overrideTone) => {
+    const textToUse = (overridePrompt || announcementPrompt).trim()
+    const toneToUse = overrideTone || aiTone
+    if (!textToUse) {
+      toast.error('Please enter a brief or choose a quick topic.')
+      return
+    }
 
-    setCreating(true)
+    setDrafting(true)
     try {
-      // Uses the backend chat committee action: Gemini drafts the formal title & message and broadcasts notification!
       const res = await chatApi.sendMessage({
         selected_type: 'committee_action',
         action: 'announcement',
-        text: announcementPrompt.trim(),
+        text: textToUse,
+        tone: toneToUse,
+        preview: true,
+      })
+
+      if (res.draft && res.draft.title && res.draft.message) {
+        setDraftTitle(res.draft.title)
+        setDraftMessage(res.draft.message)
+        setAiStep('preview')
+        toast.success('Gemini AI drafted your notice! Review and fine-tune below.')
+      } else {
+        toast.error(res.reply || 'AI could not draft a notice. Please refine your brief.')
+      }
+    } catch (err) {
+      toast.error(err.message || 'AI drafting failed.')
+    } finally {
+      setDrafting(false)
+    }
+  }
+
+  // 2. Broadcast the Final Reviewed Notice
+  const handleBroadcast = async (e) => {
+    e?.preventDefault()
+    if (!draftTitle.trim() || !draftMessage.trim()) {
+      toast.error('Notice title and content cannot be empty.')
+      return
+    }
+
+    setBroadcasting(true)
+    try {
+      const res = await chatApi.sendMessage({
+        selected_type: 'committee_action',
+        action: 'announcement',
+        title: draftTitle.trim(),
+        message: draftMessage.trim(),
         pin: isPinChecked,
       })
 
-      toast.success(res.reply || 'Announcement published and broadcast to residents.')
+      toast.success(res.reply || 'Notice broadcast successfully to all residents!')
       setCreateModalOpen(false)
+      setAiStep('input')
       setAnnouncementPrompt('')
+      setDraftTitle('')
+      setDraftMessage('')
       setIsPinChecked(false)
       fetchAnnouncements()
     } catch (err) {
-      toast.error(err.message || 'Failed to publish announcement.')
+      toast.error(err.message || 'Failed to broadcast announcement.')
     } finally {
-      setCreating(false)
+      setBroadcasting(false)
     }
   }
 
@@ -134,10 +242,13 @@ export function ManagementAnnouncements() {
         </div>
 
         <button
-          onClick={() => setCreateModalOpen(true)}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-semibold rounded-xl shadow-sm transition-colors self-start"
+          onClick={() => {
+            setAiStep('input')
+            setCreateModalOpen(true)
+          }}
+          className="inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs sm:text-sm font-bold rounded-xl shadow-md shadow-blue-500/20 transition-all self-start group"
         >
-          <Sparkles className="w-4 h-4" />
+          <Sparkles className="w-4 h-4 text-amber-300 group-hover:rotate-12 transition-transform" />
           <span>Publish Notice via AI</span>
         </button>
       </div>
@@ -257,7 +368,7 @@ export function ManagementAnnouncements() {
                     </button>
                     <button
                       onClick={() => setDeleteTargetId(ann.id)}
-                      className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg"
+                      className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-slate-100 rounded-lg"
                       title="Delete"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -265,7 +376,7 @@ export function ManagementAnnouncements() {
                   </div>
                 </div>
 
-                <p className="text-xs sm:text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
+                <p className="text-xs sm:text-sm text-slate-600 whitespace-pre-wrap leading-relaxed">
                   {ann.message}
                 </p>
 
@@ -282,59 +393,268 @@ export function ManagementAnnouncements() {
         )}
       </div>
 
-      {/* Create Announcement via AI Modal */}
+      {/* AI Notice Studio Modal */}
       {createModalOpen && (
         <Modal
           isOpen={createModalOpen}
           onClose={() => setCreateModalOpen(false)}
-          title="Publish Community Notice via AI"
-          description="Gemini will format your brief notes into a clear, professional announcement title & message, and broadcast notifications."
+          title="AI Notice Studio"
+          description="Powered by Gemini AI — transforms rough notes into professional community circulars."
           icon={Sparkles}
-          maxWidth="max-w-lg"
+          maxWidth="max-w-2xl"
         >
-          <form onSubmit={handleCreateAnnouncement} className="space-y-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                Notice Brief / Details
+          {aiStep === 'input' ? (
+            <div className="space-y-4">
+              {/* AI Banner */}
+              <div className="p-3.5 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200/70 rounded-xl flex items-start gap-3">
+                <Sparkles className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+                <div className="text-xs text-slate-700 leading-relaxed">
+                  <p className="font-bold text-blue-950">Intelligent Society Circular Generator</p>
+                  <p className="text-slate-600 mt-0.5">
+                    Type a few rough bullet points or pick a preset topic. Gemini will generate a polished title, formatted announcement, and prepare instant resident notifications.
+                  </p>
+                </div>
+              </div>
+
+              {/* Quick Topic Chips */}
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                  Inspiration / Quick Presets
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {QUICK_TOPICS.map((topic, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => {
+                        setAnnouncementPrompt(topic.prompt)
+                        setAiTone(topic.tone)
+                      }}
+                      className="px-2.5 py-1 text-xs font-semibold bg-slate-100 hover:bg-blue-100 hover:text-blue-800 text-slate-700 rounded-lg transition-colors border border-slate-200/60"
+                    >
+                      {topic.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Text Input */}
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1">
+                  Topic Brief & Key Details <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  rows={4}
+                  required
+                  value={announcementPrompt}
+                  onChange={(e) => setAnnouncementPrompt(e.target.value)}
+                  placeholder="e.g. Lift in Block B undergoing annual maintenance on Saturday 2 PM to 5 PM. Use stairs or Block A service lift..."
+                  className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 placeholder:text-slate-400"
+                />
+              </div>
+
+              {/* Tone Selection */}
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                  AI Circular Tone & Style
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {TONE_OPTIONS.map((opt) => {
+                    const Icon = opt.icon
+                    const isSelected = aiTone === opt.id
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => setAiTone(opt.id)}
+                        className={`p-3 text-left rounded-xl border transition-all flex flex-col justify-between ${
+                          isSelected
+                            ? 'bg-blue-50/80 border-blue-500 ring-2 ring-blue-500/20'
+                            : 'bg-white border-slate-200 hover:border-slate-300'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1.5">
+                          <Icon className={`w-4 h-4 ${isSelected ? 'text-blue-600' : 'text-slate-500'}`} />
+                          <span
+                            className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                              isSelected ? 'bg-blue-200 text-blue-900' : 'bg-slate-100 text-slate-600'
+                            }`}
+                          >
+                            {opt.badge}
+                          </span>
+                        </div>
+                        <div>
+                          <p className={`text-xs font-bold ${isSelected ? 'text-blue-950' : 'text-slate-800'}`}>
+                            {opt.name}
+                          </p>
+                          <p className="text-[11px] text-slate-500 mt-0.5 leading-snug line-clamp-2">
+                            {opt.desc}
+                          </p>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => setCreateModalOpen(false)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 transition-colors"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="button"
+                  disabled={drafting || !announcementPrompt.trim()}
+                  onClick={() => handleGenerateDraft()}
+                  className="px-5 py-2.5 text-xs font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 rounded-xl shadow-md shadow-blue-500/20 flex items-center gap-2 transition-all"
+                >
+                  {drafting ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Gemini is Drafting Notice…</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                      <span>Generate AI Draft</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Generated Banner */}
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between">
+                <div className="flex items-center gap-2 text-xs text-emerald-900 font-bold">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>Draft Generated by Gemini AI</span>
+                </div>
+                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full">
+                  Tone: {aiTone}
+                </span>
+              </div>
+
+              {/* Editable Title */}
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1">
+                  Notice Title (Editable)
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={draftTitle}
+                  onChange={(e) => setDraftTitle(e.target.value)}
+                  className="w-full px-3.5 py-2 text-sm font-bold text-slate-900 bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-blue-600"
+                />
+              </div>
+
+              {/* Editable Body */}
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1">
+                  Notice Content (Editable)
+                </label>
+                <textarea
+                  rows={6}
+                  required
+                  value={draftMessage}
+                  onChange={(e) => setDraftMessage(e.target.value)}
+                  className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-blue-600 leading-relaxed font-sans"
+                />
+              </div>
+
+              {/* Pin Checkbox */}
+              <label className="flex items-center gap-2.5 p-3 bg-slate-50 border border-slate-200/80 rounded-xl cursor-pointer text-xs font-semibold text-slate-800 hover:bg-slate-100/70 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={isPinChecked}
+                  onChange={(e) => setIsPinChecked(e.target.checked)}
+                  className="w-4 h-4 rounded text-blue-600 border-slate-300 focus:ring-blue-500"
+                />
+                <div className="flex items-center gap-1.5">
+                  <Pin className="w-3.5 h-3.5 text-amber-600 fill-current" />
+                  <span>Pin this notice to the top of all resident dashboards</span>
+                </div>
               </label>
-              <textarea
-                rows={4}
-                required
-                value={announcementPrompt}
-                onChange={(e) => setAnnouncementPrompt(e.target.value)}
-                placeholder="e.g. Water tank cleaning scheduled for Friday 9:30 AM to 2 PM. Water supply will be disconnected during this window. Please store water in advance."
-                className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-xl focus:border-blue-600"
-              />
-            </div>
 
-            <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700">
-              <input
-                type="checkbox"
-                checked={isPinChecked}
-                onChange={(e) => setIsPinChecked(e.target.checked)}
-                className="rounded text-blue-600 border-slate-300"
-              />
-              <span>Pin this notice to the top of all resident dashboards</span>
-            </label>
+              {/* AI Refine Actions */}
+              <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                <span className="text-[11px] font-bold text-slate-500 mr-1 flex items-center gap-1">
+                  <Sparkles className="w-3 h-3 text-blue-500" />
+                  Quick AI Refine:
+                </span>
+                <button
+                  type="button"
+                  disabled={drafting}
+                  onClick={() => handleGenerateDraft(announcementPrompt, 'urgent')}
+                  className="px-2.5 py-1 text-[11px] font-semibold bg-rose-50 text-rose-700 hover:bg-rose-100 rounded-lg transition-colors border border-rose-200"
+                >
+                  ⚡ Make More Urgent
+                </button>
+                <button
+                  type="button"
+                  disabled={drafting}
+                  onClick={() => handleGenerateDraft(announcementPrompt, 'formal')}
+                  className="px-2.5 py-1 text-[11px] font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg transition-colors border border-slate-200"
+                >
+                  👔 Make More Formal
+                </button>
+                <button
+                  type="button"
+                  disabled={drafting}
+                  onClick={() => handleGenerateDraft(announcementPrompt, 'friendly')}
+                  className="px-2.5 py-1 text-[11px] font-semibold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-lg transition-colors border border-indigo-200"
+                >
+                  🤝 Make Friendlier
+                </button>
+              </div>
 
-            <div className="pt-2 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setCreateModalOpen(false)}
-                className="px-3 py-1.5 text-xs text-slate-700 bg-white border rounded-xl"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={creating}
-                className="px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-sm flex items-center gap-1.5"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>{creating ? 'AI Drafting & Broadcasting…' : 'Generate & Broadcast'}</span>
-              </button>
+              {/* Footer Buttons */}
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => setAiStep('input')}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-800"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  <span>Edit Brief & Tone</span>
+                </button>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCreateModalOpen(false)}
+                    className="px-3.5 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={broadcasting}
+                    onClick={handleBroadcast}
+                    className="px-5 py-2.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-xl shadow-md shadow-blue-500/20 flex items-center gap-2 transition-all"
+                  >
+                    {broadcasting ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Broadcasting to Residents…</span>
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-3.5 h-3.5" />
+                        <span>Broadcast Notice to Residents</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
             </div>
-          </form>
+          )}
         </Modal>
       )}
 

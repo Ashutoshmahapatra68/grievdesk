@@ -318,8 +318,18 @@ def draft_announcement(raw_text: str) -> dict:
     if len(cleaned) < 5 or lower.strip(".!?") in GREETINGS:
         return {"error": "not_understood"}
 
+    # Extract tone if provided
+    tone = "formal"
+    if "urgent" in lower or "emergency" in lower or "outage" in lower or "shutdown" in lower:
+        tone = "urgent"
+    elif "friendly" in lower or "celebration" in lower or "festival" in lower or "gathering" in lower:
+        tone = "friendly"
+
+    # Strip out tone hint from main text if attached
+    text_clean = re.sub(r"\(Tone/Style:[^)]+\)", "", cleaned, flags=re.IGNORECASE).strip()
+
     # Build a crisp <= 10-word title from the first clause or key phrase
-    first_chunk = re.split(r"[.!?\n]", cleaned)[0].strip()
+    first_chunk = re.split(r"[.!?\n]", text_clean)[0].strip()
     words = first_chunk.split()
     if len(words) > 9:
         title = " ".join(words[:9]).rstrip(",;:") + " Notice"
@@ -329,8 +339,17 @@ def draft_announcement(raw_text: str) -> dict:
     if len(title) > 200:
         title = title[:197] + "..."
 
-    body = _clean_sentence(cleaned)
-    message = f"Dear Residents,\n\n{body}\n\nThank you for your cooperation.\n- Society Management Committee"
+    body = _clean_sentence(text_clean)
+    if tone == "urgent":
+        title = f"⚠️ URGENT: {title}"
+        message = f"ATTENTION ALL RESIDENTS,\n\n{body}\n\nPlease take note and plan accordingly. Your cooperation is appreciated.\n\n— Society Management & Security Office"
+    elif tone == "friendly":
+        title = f"🎉 {title}"
+        message = f"Dear Neighbors and Residents,\n\n{body}\n\nWe warmly invite everyone to participate and make it a memorable occasion!\n\nWarm regards,\n— Society Community Committee"
+    else:
+        title = f"Notice: {title}"
+        message = f"Dear Residents,\n\n{body}\n\nFor any queries or assistance, please contact the society office.\n\nThank you for your cooperation.\n— Society Management Committee"
+
     return {"title": title, "message": message, "_engine": "local_ai"}
 
 

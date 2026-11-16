@@ -24,6 +24,10 @@ export const chatApi = {
     pin,
     flat_no,
     block_no,
+    preview,
+    tone,
+    title,
+    message,
   }) => {
     if (audio) {
       const formData = new FormData()
@@ -35,6 +39,10 @@ export const chatApi = {
       if (pin !== undefined) formData.append('pin', pin ? 'true' : 'false')
       if (flat_no) formData.append('flat_no', flat_no)
       if (block_no) formData.append('block_no', block_no)
+      if (preview !== undefined) formData.append('preview', preview ? 'true' : 'false')
+      if (tone) formData.append('tone', tone)
+      if (title) formData.append('title', title)
+      if (message) formData.append('message', message)
 
       return postForm('/api/chat/message', formData)
     }
@@ -49,6 +57,10 @@ export const chatApi = {
     if (pin !== undefined) payload.pin = !!pin
     if (flat_no) payload.flat_no = flat_no
     if (block_no) payload.block_no = block_no
+    if (preview !== undefined) payload.preview = !!preview
+    if (tone) payload.tone = tone
+    if (title) payload.title = title
+    if (message) payload.message = message
 
     return post('/api/chat/message', payload)
   },

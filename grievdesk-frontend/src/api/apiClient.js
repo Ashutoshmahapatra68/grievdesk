@@ -1,8 +1,12 @@
-const BASE = (
+const rawBase = (
   import.meta.env.VITE_API_BASE_URL ||
   import.meta.env.VITE_API_URL ||
-  'http://localhost:5000'
+  ''
 ).replace(/\/$/, '')
+
+// Normalize localhost to 127.0.0.1 to prevent Windows IPv6 (::1) connection dropouts
+const normalizedBase = rawBase.replace('://localhost', '://127.0.0.1')
+const BASE = normalizedBase || (import.meta.env.DEV ? '' : 'http://127.0.0.1:5000')
 
 const TOKEN_KEY = 'grievdesk_token'
 

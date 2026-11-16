@@ -151,12 +151,31 @@ def _handle_committee_action(user, text, data):
 
 def _announcement(user, text, data):
     db = get_db()
-    drafted = gemini.draft_announcement(text)
-    if drafted.get("error") == "not_understood":
+
+    # If client passed already approved/edited title and message
+    approved_title = (data.get("title") or "").strip()
+    approved_message = (data.get("message") or "").strip()
+
+    if approved_title and approved_message:
+        drafted = {"title": approved_title, "message": approved_message}
+    else:
+        tone = (data.get("tone") or "").strip()
+        augmented_text = f"{text} (Tone/Style: {tone})" if tone else text
+        drafted = gemini.draft_announcement(augmented_text)
+        if drafted.get("error") == "not_understood":
+            return _result(
+                "I didn't understand that as an announcement. Tell me what residents should be told "
+                "(for example: water tank cleaning on Friday 9:30 to 2, supply will be off).",
+                200, understood=False,
+            )
+
+    # Return draft preview if requested without saving yet
+    if data.get("preview") or data.get("draft_only"):
         return _result(
-            "I didn't understand that as an announcement. Tell me what residents should be told "
-            "(for example: water tank cleaning on Friday 9:30 to 2, supply will be off).",
-            200, understood=False,
+            f"Drafted announcement: \"{drafted['title']}\"",
+            200,
+            understood=True,
+            draft={"title": drafted["title"], "message": drafted["message"]},
         )
 
     pinned = _as_bool(data.get("pin"))
