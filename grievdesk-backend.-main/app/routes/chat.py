@@ -260,6 +260,12 @@ def send_message():
         return jsonify({"error": "invalid_selected_type", "allowed": list(SelectedType.ALL)}), 400
 
     has_text = isinstance(text, str) and bool(text.strip())
+    if not has_text and not audio_file:
+        fallback_text = f"{(data.get('title') or '').strip()} {(data.get('message') or '').strip()} {(data.get('instruction') or '').strip()}".strip()
+        if fallback_text:
+            text = fallback_text
+            has_text = True
+
     if audio_file and has_text:
         return jsonify({"error": "text_and_audio", "message": "Send either text or a voice note, not both."}), 400
     if not audio_file and not has_text:
