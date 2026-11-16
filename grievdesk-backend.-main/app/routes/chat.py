@@ -152,16 +152,18 @@ def _handle_committee_action(user, text, data):
 def _announcement(user, text, data):
     db = get_db()
 
-    # If client passed already approved/edited title and message
+    is_preview = bool(data.get("preview") or data.get("draft_only"))
     approved_title = (data.get("title") or "").strip()
     approved_message = (data.get("message") or "").strip()
 
-    if approved_title and approved_message:
+    # If client passed already approved title & message AND this is the final broadcast (not a preview refine)
+    if approved_title and approved_message and not is_preview:
         drafted = {"title": approved_title, "message": approved_message}
     else:
-        tone = (data.get("tone") or "").strip()
-        augmented_text = f"{text} (Tone/Style: {tone})" if tone else text
-        drafted = gemini.draft_announcement(augmented_text)
+        tone = (data.get("tone") or "formal").strip()
+        # Content to draft: prefer raw text or current message/title
+        content_to_draft = text or approved_message or approved_title
+        drafted = gemini.draft_announcement(content_to_draft, tone=tone)
         if drafted.get("error") == "not_understood":
             return _result(
                 "I didn't understand that as an announcement. Tell me what residents should be told "
@@ -170,12 +172,12 @@ def _announcement(user, text, data):
             )
 
     # Return draft preview if requested without saving yet
-    if data.get("preview") or data.get("draft_only"):
+    if is_preview:
         return _result(
             f"Drafted announcement: \"{drafted['title']}\"",
             200,
             understood=True,
-            draft={"title": drafted["title"], "message": drafted["message"]},
+            draft={"title": drafted["title"], "message": drafted["message"], "tone": data.get("tone", "formal")},
         )
 
     pinned = _as_bool(data.get("pin"))

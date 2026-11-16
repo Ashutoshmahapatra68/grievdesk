@@ -94,6 +94,8 @@ export function ManagementAnnouncements() {
   const [isPinChecked, setIsPinChecked] = useState(false)
   const [drafting, setDrafting] = useState(false)
   const [broadcasting, setBroadcasting] = useState(false)
+  const [refiningTone, setRefiningTone] = useState(null) // null | 'urgent' | 'formal' | 'friendly' | 'custom'
+  const [customRefinePrompt, setCustomRefinePrompt] = useState('')
 
   // Edit Announcement Modal State
   const [editModalOpen, setEditModalOpen] = useState(false)
@@ -143,6 +145,7 @@ export function ManagementAnnouncements() {
       if (res.draft && res.draft.title && res.draft.message) {
         setDraftTitle(res.draft.title)
         setDraftMessage(res.draft.message)
+        setAiTone(toneToUse)
         setAiStep('preview')
         toast.success('Gemini AI drafted your notice! Review and fine-tune below.')
       } else {
@@ -152,6 +155,77 @@ export function ManagementAnnouncements() {
       toast.error(err.message || 'AI drafting failed.')
     } finally {
       setDrafting(false)
+    }
+  }
+
+  // 2. Refine existing draft to a different tone
+  const handleRefineTone = async (targetTone) => {
+    const contentToRefine = (draftMessage || draftTitle || announcementPrompt).trim()
+    if (!contentToRefine) {
+      toast.error('No content available to refine.')
+      return
+    }
+
+    setRefiningTone(targetTone)
+    try {
+      const res = await chatApi.sendMessage({
+        selected_type: 'committee_action',
+        action: 'announcement',
+        text: contentToRefine,
+        tone: targetTone,
+        preview: true,
+      })
+
+      if (res.draft && res.draft.title && res.draft.message) {
+        setDraftTitle(res.draft.title)
+        setDraftMessage(res.draft.message)
+        setAiTone(targetTone)
+
+        if (targetTone === 'urgent') {
+          toast.success('Notice refined to Urgent High-Priority Alert! ⚠️')
+        } else if (targetTone === 'friendly') {
+          toast.success('Notice refined to Warm Community Invitation! 🎉')
+        } else {
+          toast.success('Notice refined to Official Formal Circular! 👔')
+        }
+      } else {
+        toast.error(res.reply || 'AI could not refine this notice. Try tweaking the text.')
+      }
+    } catch (err) {
+      toast.error(err.message || 'AI tone refinement failed.')
+    } finally {
+      setRefiningTone(null)
+    }
+  }
+
+  // 3. Custom prompt refinement
+  const handleCustomRefine = async (e) => {
+    e?.preventDefault()
+    if (!customRefinePrompt.trim()) return
+
+    const combinedText = `Existing Notice:\nTitle: ${draftTitle}\nMessage: ${draftMessage}\n\nModification instruction: ${customRefinePrompt.trim()}`
+    setRefiningTone('custom')
+    try {
+      const res = await chatApi.sendMessage({
+        selected_type: 'committee_action',
+        action: 'announcement',
+        text: combinedText,
+        tone: aiTone,
+        preview: true,
+      })
+
+      if (res.draft && res.draft.title && res.draft.message) {
+        setDraftTitle(res.draft.title)
+        setDraftMessage(res.draft.message)
+        setCustomRefinePrompt('')
+        toast.success('Notice modified with your custom instructions! ✨')
+      } else {
+        toast.error(res.reply || 'AI could not apply your instructions.')
+      }
+    } catch (err) {
+      toast.error(err.message || 'AI custom refinement failed.')
+    } finally {
+      setRefiningTone(null)
     }
   }
 
@@ -582,36 +656,101 @@ export function ManagementAnnouncements() {
                 </div>
               </label>
 
-              {/* AI Refine Actions */}
-              <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                <span className="text-[11px] font-bold text-slate-500 mr-1 flex items-center gap-1">
-                  <Sparkles className="w-3 h-3 text-blue-500" />
-                  Quick AI Refine:
-                </span>
-                <button
-                  type="button"
-                  disabled={drafting}
-                  onClick={() => handleGenerateDraft(announcementPrompt, 'urgent')}
-                  className="px-2.5 py-1 text-[11px] font-semibold bg-rose-50 text-rose-700 hover:bg-rose-100 rounded-lg transition-colors border border-rose-200"
-                >
-                  ⚡ Make More Urgent
-                </button>
-                <button
-                  type="button"
-                  disabled={drafting}
-                  onClick={() => handleGenerateDraft(announcementPrompt, 'formal')}
-                  className="px-2.5 py-1 text-[11px] font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg transition-colors border border-slate-200"
-                >
-                  👔 Make More Formal
-                </button>
-                <button
-                  type="button"
-                  disabled={drafting}
-                  onClick={() => handleGenerateDraft(announcementPrompt, 'friendly')}
-                  className="px-2.5 py-1 text-[11px] font-semibold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-lg transition-colors border border-indigo-200"
-                >
-                  🤝 Make Friendlier
-                </button>
+              {/* Quick AI Refine Section */}
+              <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
+                    <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Quick AI Refine</span>
+                  </div>
+                  <span className="text-[11px] text-slate-500 font-medium">Click to transform tone instantly</span>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={!!refiningTone}
+                    onClick={() => handleRefineTone('urgent')}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg border transition-all ${
+                      aiTone === 'urgent'
+                        ? 'bg-rose-100 text-rose-800 border-rose-300 ring-2 ring-rose-300/40'
+                        : 'bg-white hover:bg-rose-50 text-rose-700 border-rose-200 hover:border-rose-300 shadow-xs'
+                    } disabled:opacity-50`}
+                  >
+                    {refiningTone === 'urgent' ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin text-rose-600" />
+                    ) : (
+                      <Flame className="w-3.5 h-3.5 text-rose-600" />
+                    )}
+                    <span>{refiningTone === 'urgent' ? 'Refining to Urgent…' : 'Make More Urgent'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={!!refiningTone}
+                    onClick={() => handleRefineTone('formal')}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg border transition-all ${
+                      aiTone === 'formal'
+                        ? 'bg-blue-100 text-blue-900 border-blue-300 ring-2 ring-blue-300/40'
+                        : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200 hover:border-slate-300 shadow-xs'
+                    } disabled:opacity-50`}
+                  >
+                    {refiningTone === 'formal' ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-600" />
+                    ) : (
+                      <FileText className="w-3.5 h-3.5 text-blue-600" />
+                    )}
+                    <span>{refiningTone === 'formal' ? 'Refining to Formal…' : 'Make More Formal'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={!!refiningTone}
+                    onClick={() => handleRefineTone('friendly')}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg border transition-all ${
+                      aiTone === 'friendly'
+                        ? 'bg-amber-100 text-amber-900 border-amber-300 ring-2 ring-amber-300/40'
+                        : 'bg-white hover:bg-amber-50 text-amber-800 border-amber-200 hover:border-amber-300 shadow-xs'
+                    } disabled:opacity-50`}
+                  >
+                    {refiningTone === 'friendly' ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-600" />
+                    ) : (
+                      <Users className="w-3.5 h-3.5 text-amber-600" />
+                    )}
+                    <span>{refiningTone === 'friendly' ? 'Refining to Friendly…' : 'Make Friendlier'}</span>
+                  </button>
+                </div>
+
+                {/* Custom AI Instruction Bar */}
+                <form onSubmit={handleCustomRefine} className="flex items-center gap-2 pt-1 border-t border-slate-200/60">
+                  <div className="relative flex-1">
+                    <input
+                      type="text"
+                      value={customRefinePrompt}
+                      onChange={(e) => setCustomRefinePrompt(e.target.value)}
+                      placeholder="Or tell AI: e.g. 'Add ₹500 fine for violations' or 'Shorten to 2 bullet points'..."
+                      className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-blue-600 placeholder:text-slate-400"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={!customRefinePrompt.trim() || !!refiningTone}
+                    className="px-3 py-1.5 text-xs font-bold text-white bg-slate-800 hover:bg-slate-900 disabled:opacity-40 rounded-lg transition-colors flex items-center gap-1.5 shrink-0"
+                  >
+                    {refiningTone === 'custom' ? (
+                      <>
+                        <RefreshCw className="w-3 h-3 animate-spin" />
+                        <span>Applying…</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-3 h-3 text-amber-300" />
+                        <span>Instruct AI</span>
+                      </>
+                    )}
+                  </button>
+                </form>
               </div>
 
               {/* Footer Buttons */}

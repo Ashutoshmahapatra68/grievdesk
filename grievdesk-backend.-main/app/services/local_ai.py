@@ -312,24 +312,28 @@ def answer_rules_question(rulebook_text: str, question: str) -> dict:
     return {"answer": answer, "_engine": "local_ai"}
 
 
-def draft_announcement(raw_text: str) -> dict:
+def draft_announcement(raw_text: str, tone: str = "formal") -> dict:
     cleaned = " ".join((raw_text or "").split()).strip()
     lower = cleaned.lower()
     if len(cleaned) < 5 or lower.strip(".!?") in GREETINGS:
         return {"error": "not_understood"}
 
     # Extract tone if provided
-    tone = "formal"
-    if "urgent" in lower or "emergency" in lower or "outage" in lower or "shutdown" in lower:
-        tone = "urgent"
-    elif "friendly" in lower or "celebration" in lower or "festival" in lower or "gathering" in lower:
-        tone = "friendly"
+    active_tone = (tone or "formal").lower()
+    if "urgent" in active_tone or "urgent" in lower or "emergency" in lower or "outage" in lower or "shutdown" in lower:
+        active_tone = "urgent"
+    elif "friendly" in active_tone or "celebration" in lower or "festival" in lower or "gathering" in lower:
+        active_tone = "friendly"
 
-    # Strip out tone hint from main text if attached
+    # Strip out tone hint and previous prefixes/headers/footers from main text so consecutive refinements stay clean
     text_clean = re.sub(r"\(Tone/Style:[^)]+\)", "", cleaned, flags=re.IGNORECASE).strip()
+    text_clean = re.sub(r"^(⚠️\s*URGENT:?|Notice:?|🎉\s*|Circular:?|Official Notice:?)\s*", "", text_clean, flags=re.IGNORECASE).strip()
+    text_clean = re.sub(r"^(ATTENTION ALL RESIDENTS,?\s*|Dear Neighbors and Residents,?\s*|Dear Residents,?\s*)", "", text_clean, flags=re.IGNORECASE).strip()
+    text_clean = re.sub(r"(Please take note and plan accordingly.*?|We warmly invite everyone.*?|For any queries.*?|Thank you for your cooperation.*?|—\s*Society.*$|•\s*Contact the security desk.*$)", "", text_clean, flags=re.IGNORECASE | re.DOTALL).strip()
 
     # Build a crisp <= 10-word title from the first clause or key phrase
     first_chunk = re.split(r"[.!?\n]", text_clean)[0].strip()
+    first_chunk = re.sub(r"^(⚠️\s*URGENT:?|Notice:?|🎉\s*|Circular:?|Official Notice:?)\s*", "", first_chunk, flags=re.IGNORECASE).strip()
     words = first_chunk.split()
     if len(words) > 9:
         title = " ".join(words[:9]).rstrip(",;:") + " Notice"
@@ -340,15 +344,33 @@ def draft_announcement(raw_text: str) -> dict:
         title = title[:197] + "..."
 
     body = _clean_sentence(text_clean)
-    if tone == "urgent":
+    if active_tone == "urgent":
         title = f"⚠️ URGENT: {title}"
-        message = f"ATTENTION ALL RESIDENTS,\n\n{body}\n\nPlease take note and plan accordingly. Your cooperation is appreciated.\n\n— Society Management & Security Office"
-    elif tone == "friendly":
+        message = (
+            f"ATTENTION ALL RESIDENTS,\n\n"
+            f"{body}\n\n"
+            f"• Please take necessary precautions and plan accordingly.\n"
+            f"• Contact the security desk or maintenance helpline for urgent assistance.\n\n"
+            f"— Society Management & Security Office"
+        )
+    elif active_tone == "friendly":
         title = f"🎉 {title}"
-        message = f"Dear Neighbors and Residents,\n\n{body}\n\nWe warmly invite everyone to participate and make it a memorable occasion!\n\nWarm regards,\n— Society Community Committee"
+        message = (
+            f"Dear Neighbors and Residents,\n\n"
+            f"{body}\n\n"
+            f"We warmly invite all residents and their families to participate and make it a memorable occasion!\n\n"
+            f"Warm regards,\n"
+            f"— Society Community & Cultural Committee"
+        )
     else:
         title = f"Notice: {title}"
-        message = f"Dear Residents,\n\n{body}\n\nFor any queries or assistance, please contact the society office.\n\nThank you for your cooperation.\n— Society Management Committee"
+        message = (
+            f"Dear Residents,\n\n"
+            f"{body}\n\n"
+            f"For any queries, please reach out to the society office during working hours.\n\n"
+            f"Thank you for your cooperation.\n"
+            f"— Society Management Committee"
+        )
 
     return {"title": title, "message": message, "_engine": "local_ai"}
 
